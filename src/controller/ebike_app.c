@@ -42,6 +42,7 @@
 	static uint16_t   ui16_duty_cycle_ramp_up_inverse_step_default = PWM_DUTY_CYCLE_RAMP_UP_INVERSE_STEP_DEFAULT;
 	static uint16_t   ui16_duty_cycle_ramp_down_inverse_step = PWM_DUTY_CYCLE_RAMP_DOWN_INVERSE_STEP_DEFAULT;
 	static uint16_t   ui16_battery_voltage_filtered_x1000 = 0;
+	static uint16_t   ui16_battery_no_load_voltage_filtered_x1000 = 0;
 	static uint8_t    ui8_battery_current_filtered_x10 = 0;
 	static uint8_t    ui8_adc_battery_current_max = ADC_10_BIT_BATTERY_CURRENT_MAX;
 	static uint8_t    ui8_adc_battery_current_target = 0;
@@ -1188,7 +1189,20 @@
 
 	static void get_battery_current_filtered(void)
 	{
-	  ui8_battery_current_filtered_x10 = ((uint16_t) ui8_adc_battery_current_filtered * BATTERY_CURRENT_PER_10_BIT_ADC_STEP_X100) / 10;
+		ui8_battery_current_filtered_x10 = ((uint16_t) ui8_adc_battery_current_filtered * BATTERY_CURRENT_PER_10_BIT_ADC_STEP_X100 + 5) / 10;
+
+		// Save voltage if current is zero for 2 seconds
+		static uint8_t ui8_no_load_counter = 15;
+		if(!ui8_battery_current_filtered_x10)
+		{
+			if(ui8_no_load_counter++ >= 20)
+			{
+				ui16_battery_no_load_voltage_filtered_x1000 = ui16_battery_voltage_filtered_x1000;
+				ui8_no_load_counter = 0;
+			}
+		}
+		else
+			ui8_no_load_counter = 0;
 	}
 
 
@@ -1761,12 +1775,10 @@
 						// after some seconds: switch on lights (if enabled) and abort function
 						if((ui8_lights_counter >= DELAY_LIGHTS_ON)||((ui8_assist_level != ui8_assist_level_temp)&&(!ui8_display_data_enabled)&&(!ui8_cadence_sensor_calibration_flag)&&(!ui8_torque_sensor_calibration_flag)))
 						{
-							#if ENABLE_LIGHTS
 							// set lights flag
 							ui8_lights_flag = 1;
 							// lights 5s off		
 							ui8_lights_on_5s = 0;
-							#endif
 							// clear menu flag
 							ui8_menu_flag = 0;
 							// clear menu index
@@ -2546,21 +2558,20 @@
 		if(ui8_display_data_enabled)
 		{
 			// data values
-			ui16_data_value_array[0] = (uint16_t) ui16_display_data_factor / (ui16_motor_temperature_filtered_x10 / 10);
-			ui16_data_value_array[1] = (uint16_t) ui16_display_data_factor / (ui16_battery_SOC_percentage_x10 / 10);
-			ui16_data_value_array[2] = (uint16_t) ui16_display_data_factor / (ui16_battery_voltage_calibrated_x10 / 10);
-			ui16_data_value_array[3] = (uint16_t) ui16_display_data_factor / (ui8_battery_current_filtered_x10 / 10);
-			ui16_data_value_array[4] = (uint16_t) ui16_display_data_factor / (ui16_battery_power_filtered_x10 / 100);
-			ui16_data_value_array[5] = (uint16_t) ui16_display_data_factor / UI8_ADC_TORQUE_SENSOR;
-			ui16_data_value_array[6] = (uint16_t) ui16_display_data_factor / (UI16_ADC_10_BIT_TORQUE_SENSOR / 10);
-			ui16_data_value_array[7] = (uint16_t) ui16_display_data_factor / ui8_pedal_cadence_RPM;
-			ui16_data_value_array[8] = (uint16_t) ui16_display_data_factor / (ui16_human_power_x10 / 100);
-			ui16_data_value_array[9] = (uint16_t) ui16_display_data_factor / (m_configuration_variables.ui16_cadence_sensor_pulse_high_percentage_x10 / 10);
-			ui16_data_value_array[10] = (uint16_t) ui16_display_data_factor / (ui16_pedal_weight_x100 / 100);
-			ui16_data_value_array[11] = (uint16_t) ui16_display_data_factor / (m_configuration_variables.ui8_pedal_torque_per_10_bit_ADC_step_x100);
-			ui16_data_value_array[12] = (uint16_t) ui16_display_data_factor / (ui8_pedal_torque_10_bit_ADC_range_temp / 10);
-			ui16_data_value_array[13] = (uint16_t) ui16_display_data_factor / (UI8_ADC_THROTTLE / 10);
-			
+			ui16_data_value_array[0] = (uint16_t) ui16_display_data_factor / ui16_motor_temperature_filtered_x10;
+			ui16_data_value_array[1] = (uint16_t) ui16_display_data_factor / ui16_battery_SOC_percentage_x10;
+			ui16_data_value_array[2] = (uint16_t) ui16_display_data_factor / ui16_battery_voltage_calibrated_x10;
+			ui16_data_value_array[3] = (uint16_t) ui16_display_data_factor / ui8_battery_current_filtered_x10;
+			ui16_data_value_array[4] = (uint16_t) ui16_display_data_factor / (ui16_battery_power_filtered_x10 / 10);
+			ui16_data_value_array[5] = (uint16_t) ui16_display_data_factor / (UI8_ADC_TORQUE_SENSOR * 10);
+			ui16_data_value_array[6] = (uint16_t) ui16_display_data_factor / UI16_ADC_10_BIT_TORQUE_SENSOR;
+			ui16_data_value_array[7] = (uint16_t) ui16_display_data_factor / (ui8_pedal_cadence_RPM * 10);
+			ui16_data_value_array[8] = (uint16_t) ui16_display_data_factor / (ui16_human_power_x10 / 10);
+			ui16_data_value_array[9] = (uint16_t) ui16_display_data_factor / m_configuration_variables.ui16_cadence_sensor_pulse_high_percentage_x10;
+			ui16_data_value_array[10] = (uint16_t) ui16_display_data_factor / (ui16_pedal_weight_x100 / 10);
+			ui16_data_value_array[11] = (uint16_t) ui16_display_data_factor / (m_configuration_variables.ui8_pedal_torque_per_10_bit_ADC_step_x100 * 10);
+			ui16_data_value_array[12] = (uint16_t) ui16_display_data_factor / ui8_pedal_torque_10_bit_ADC_range_temp;
+			ui16_data_value_array[13] = (uint16_t) ui16_display_data_factor / UI8_ADC_THROTTLE;
 			
 			// display data
 			if((ui8_battery_SOC_init_flag)&&(!ui8_battery_SOC_reset_flag))
@@ -2655,13 +2666,13 @@
 			ui16_debug_value_array[8] = (uint16_t) ui8_pedal_torque_10_bit_ADC_range_temp;
 			ui16_debug_value_array[9] = (uint16_t) ui8_cruise_button_flag;
 		
-			ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / (ui16_debug_value_array[ui8_debug_index] * 10);
+			ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / (ui16_debug_value_array[ui8_debug_index] * 100);
+			if(ui16_display_debug_value < 40)
+				ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / (ui16_debug_value_array[ui8_debug_index] * 10);
 			if(ui16_display_debug_value < 40)
 				ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / ui16_debug_value_array[ui8_debug_index];
 			if(ui16_display_debug_value < 40)
 				ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / (ui16_debug_value_array[ui8_debug_index] / 10);
-			if(ui16_display_debug_value < 40)
-				ui16_display_debug_value =  (uint16_t) ui16_display_data_factor / (ui16_debug_value_array[ui8_debug_index] / 100);
 		
 			ui8_tx_buffer[6] = (uint8_t) (ui16_display_debug_value & 0xFF);
 			ui8_tx_buffer[7] = (uint8_t) (ui16_display_debug_value >> 8);
@@ -2700,7 +2711,7 @@
 				f_oem_wheel_speed = (((float) ui16_wheel_speed_sensor_ticks) * 10.0) / ((float) OEM_WHEEL_SPEED_DIVISOR);
 				
 				// speed conversion for different perimeter			
-				f_oem_wheel_perimeter = ((float) ui8_oem_wheel_diameter * 25.4 * 3.14);
+				f_oem_wheel_perimeter = ((float) ui8_oem_wheel_diameter * 25.4 * 3.14159);
 				f_oem_wheel_speed *= f_oem_wheel_perimeter;
 				f_oem_wheel_speed /= (float) m_configuration_variables.ui16_wheel_perimeter;
 				
@@ -2720,13 +2731,13 @@
 		
 		// calc wheel speed  mm/0.1 sec
 		if(ui16_oem_wheel_speed)
-			ui16_wheel_speed = (uint16_t)((ui16_display_data_factor / ui16_oem_wheel_speed) * ((uint16_t) 1000 / 36));
+			ui16_wheel_speed = (uint16_t)((ui16_display_data_factor / ui16_oem_wheel_speed) * ((uint16_t) 100 / 36));
 		else
 			ui16_wheel_speed = 0;
 		
 		// calc data speed  mm/0.1 sec
 		if(ui16_display_data)	
-			ui16_data_speed = (uint16_t)((ui16_display_data_factor / ui16_display_data) * ((uint16_t) 1000 / 36));
+			ui16_data_speed = (uint16_t)((ui16_display_data_factor / ui16_display_data) * ((uint16_t) 100 / 36));
 		else
 			ui16_data_speed = 0;
 		
@@ -2766,27 +2777,19 @@
 	static void check_battery_soc(void)
 	{
 		uint16_t ui16_battery_voltage_x10;
-		uint16_t ui16_fluctuate_battery_voltage_x10;										
-		uint16_t ui16_battery_voltage_soc_x10;
 		uint8_t ui8_battery_cells_number_x10;
 
 		uint32_t ui32_battery_SOC_temp_x10;
 		uint16_t ui16_battery_power_x10;
 
 		// battery voltage x10
-		ui16_battery_voltage_x10 = ui16_battery_voltage_filtered_x1000 / 100;
+		ui16_battery_voltage_x10 = (ui16_battery_voltage_filtered_x1000 + 50) / 100;
 		
 		// filter battery voltage x10
 		ui16_battery_voltage_filtered_x10 = filter(ui16_battery_voltage_x10, ui16_battery_voltage_filtered_x10, 60);
 		
-		// calculate flutuate voltage, that depends on the current and battery pack resistance
-		ui16_fluctuate_battery_voltage_x10 = (uint16_t) ((((uint32_t) BATTERY_PACK_RESISTANCE) * ((uint32_t) ui8_battery_current_filtered_x10)) / ((uint32_t) 1000));
-
-		// now add fluctuate voltage value
-		ui16_battery_voltage_soc_x10 = ui16_battery_voltage_filtered_x10 + ui16_fluctuate_battery_voltage_x10;
-
 		// filter battery voltage soc x10
-		ui16_battery_voltage_soc_filtered_x10 = filter(ui16_battery_voltage_soc_x10, ui16_battery_voltage_soc_filtered_x10, 60);
+		ui16_battery_voltage_soc_filtered_x10 = filter((ui16_battery_no_load_voltage_filtered_x1000 + 50) / 100, ui16_battery_voltage_soc_filtered_x10, 60);
 
 		// to keep same scale as voltage of x10
 		ui8_battery_cells_number_x10 = BATTERY_CELLS_NUMBER * 10;
@@ -2820,15 +2823,15 @@
 		}
 
 		// battery voltage calibrated x10 for display data
-		ui16_battery_voltage_calibrated_x10 = ui16_battery_voltage_filtered_x10 * ACTUAL_BATTERY_VOLTAGE_PERCENT / 100;
+		ui16_battery_voltage_calibrated_x10 = (ui16_battery_voltage_filtered_x10 * ACTUAL_BATTERY_VOLTAGE_PERCENT + 50) / 100;
 		
 		// battery power x 10
-		ui16_battery_power_x10 = (uint16_t)((uint32_t) ui16_battery_voltage_filtered_x10 * ui8_battery_current_filtered_x10) / 10;
+		ui16_battery_power_x10 = (uint16_t)((uint32_t) ui16_battery_voltage_filtered_x10 * ui8_battery_current_filtered_x10 + 5) / 10;
 		// battery power filtered x 10 for display data
 		ui16_battery_power_filtered_x10 = filter(ui16_battery_power_x10, ui16_battery_power_filtered_x10, 40);
 		
 		// consumed watt-hours
-		 ui32_wh_sum_x10 += ui16_battery_power_x10;
+		ui32_wh_sum_x10 += ui16_battery_power_x10;
 		// calculate watt-hours X10 since power on
 		ui32_wh_since_power_on_x10 = ui32_wh_sum_x10 / 36000;
 		// calculate watt-hours X10 since last full charge

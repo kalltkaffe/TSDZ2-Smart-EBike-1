@@ -216,9 +216,9 @@
 
 // parameters for display data
 #if UNITS_TYPE          // 1 mph and miles
-#define OEM_WHEEL_FACTOR							90
+#define OEM_WHEEL_FACTOR							900
 #else                   // 0 = km/h and kilometer
-#define OEM_WHEEL_FACTOR							143
+#define OEM_WHEEL_FACTOR							1435
 #endif
 
 #define DATA_INDEX_ARRAY_DIM						6
